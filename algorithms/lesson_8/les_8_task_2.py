@@ -20,7 +20,6 @@ def dijkstra(graph, start):
     cost = [float('inf')] * length
     parent = [-1] * length
 
-    vert = []
     cost[start] = 0
     min_cost = 0
 
@@ -39,9 +38,22 @@ def dijkstra(graph, start):
             if min_cost > cost[i] and not is_visited[i]:
                 min_cost = cost[i]
                 start = i
-                vert.append(i)
 
-    return f'Список вершин, которые необходимо обойти: {vert}, вес: {cost}'
+    result = [[] for _ in range(length)]
+
+    for i in range(length):
+        if is_visited[i]:
+            result[i].append(i)
+            j = i
+            while parent[j] != -1:
+                result[i].append(parent[j])
+                j = parent[j]
+            
+            result[i].reverse()
+
+    return cost, result
 
 s = int(input('От какой вершины идти: '))
-print(dijkstra(g, s))
+cost, path = dijkstra(g, s)
+print(cost)
+print(*path, sep='\n')
