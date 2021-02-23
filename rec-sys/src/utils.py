@@ -1,46 +1,51 @@
-def prefilter_items(data_train):
-    # Возьмем топ по популярности
-    if take_n_popular is not None:
-        popularity = data.groupby('item_id')['quantity'].sum().reset_index()
-        popularity.rename(columns={'quantity': 'n_sold'}, inplace=True)
-        top = popularity.sort_values('n_sold', ascending=False).head(take_n_popular).item_id.tolist()
-        data.loc[~data['item_id'].isin(top), 'item_id'] = 999999
-    else:
-        # Уберем самые популярные товары (их и так купят)
-        popularity = data.groupby('item_id')['user_id'].nunique().reset_index()
-        popularity['user_id'] = popularity['user_id'] / data['user_id'].nunique()
-        popularity.rename(columns={'user_id': 'share_unique_users'}, inplace=True)
-        top_popular = popularity[popularity['share_unique_users'] > 0.2].item_id.tolist()
-        data.loc[data['item_id'].isin(top_popular), 'item_id'] = 999999
+import pandas as pd
+import numpy as np
 
-        # Уберем самые НЕ популярные товары (их и так НЕ купят)
-        top_notpopular = popularity[popularity['share_unique_users'] < 0.002].item_id.tolist()
-        data.loc[data['item_id'].isin(top_notpopular), 'item_id'] = 999999
+def prefilter_items(data, take_n_popular=5000, item_features=None):    
+    # Уберем самые популярные товары (их и так купят)
+    popularity = data.groupby('item_id')['user_id'].nunique().reset_index() / data['user_id'].nunique()
+    popularity.rename(columns={'user_id': 'share_unique_users'}, inplace=True)
 
-        # Уберем товары, которые не продавались за последние 12 месяцев
-        actuality = data.groupby('item_id')['week_no'].nunique().reset_index()
-        top_actual = actuality[actuality.week_no > 365 / 7].item_id.tolist()
-        data.loc[data['item_id'].isin(top_actual), 'item_id'] = 999999
+    top_popular = popularity[popularity['share_unique_users'] > 0.2].item_id.tolist()
+    data = data[~data['item_id'].isin(top_popular)]
 
-        # Уберем слишком дешевые товары (на них не заработаем). 1 покупка из рассылок стоит 60 руб.
-        data['price'] = data['sales_value'] / (np.maximum(data['quantity'], 1))
-        low_price = data[data['price'] > 2].item_id.tolist()
-        data.loc[data['item_id'].isin(low_price), 'item_id'] = 999999
+    # Уберем самые НЕ популярные товары (их и так НЕ купят)
+    top_notpopular = popularity[popularity['share_unique_users'] < 0.02].item_id.tolist()
+    data = data[~data['item_id'].isin(top_notpopular)]
 
-        # Уберем слишком дорогие товары
-        high_price = data[data['price'] > 100].item_id.tolist()
-        data.loc[data['item_id'].isin(low_price), 'item_id'] = 999999
+    # Уберем товары, которые не продавались за последние 12 месяцев
 
-    # Уберем department
+    # Уберем не интересные для рекоммендаций категории (department)
     if item_features is not None:
-        department_size = pd.DataFrame(item_features.groupby('department')['item_id'].nunique().sort_values(ascending=False)).reset_index()
+        department_size = pd.DataFrame(item_features.\
+                                        groupby('department')['item_id'].nunique().\
+                                        sort_values(ascending=False)).reset_index()
+
         department_size.columns = ['department', 'n_items']
         rare_departments = department_size[department_size['n_items'] < 150].department.tolist()
         items_in_rare_departments = item_features[item_features['department'].isin(rare_departments)].item_id.unique().tolist()
+
         data = data[~data['item_id'].isin(items_in_rare_departments)]
 
-    return data
+
+    # Уберем слишком дешевые товары (на них не заработаем). 1 покупка из рассылок стоит 60 руб.
+    data['price'] = data['sales_value'] / (np.maximum(data['quantity'], 1))
+    data = data[data['price'] > 2]
+
+    # Уберем слишком дорогие товары
+    data = data[data['price'] < 50]
+
+    # Возьмем топ по популярности
+    popularity = data.groupby('item_id')['quantity'].sum().reset_index()
+    popularity.rename(columns={'quantity': 'n_sold'}, inplace=True)
+
+    top = popularity.sort_values('n_sold', ascending=False).head(take_n_popular).item_id.tolist()
     
+    # Заведем фиктивный item_id (если юзер покупал товары из топ-5000, то он "купил" такой товар)
+    data.loc[~data['item_id'].isin(top), 'item_id'] = 999999
+    
+    return data
+ 
 
 def postfilter_items():
     pass
